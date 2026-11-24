@@ -1,0 +1,151 @@
+/* UNMINTED: a dark radar console. Ink-navy panels, amber for the watchlist tier, teal for value,
+   monospace numerals. No framework, no network: this file and app.js are the whole page. */
+:root {
+  --bg: #070b12;
+  --panel: #0d1420;
+  --panel-2: #111a2a;
+  --line: #1d2a3f;
+  --line-soft: #16213a;
+  --ink: #dce6f2;
+  --mut: #8b9db8;
+  --dim: #5d7089;
+  --amber: #f2b33d;
+  --teal: #2dd4bf;
+  --grn: #57d977;
+  --red: #f2765c;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 14px/1.5 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* ---- top bar ---- */
+.topbar {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 14px 28px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #0c1322, var(--panel));
+}
+.brand { font: 700 22px/1 var(--mono); letter-spacing: 0.14em; color: var(--ink); }
+.pulse {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--teal); margin-right: 10px; box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.15);
+}
+.tag { color: var(--mut); font-size: 13px; letter-spacing: 0.04em; }
+.prov { margin-left: auto; color: var(--dim); font: 12px var(--mono); text-align: right; }
+
+/* ---- hero strip ---- */
+.hero { padding: 18px 28px 4px; display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+.hero h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 650; max-width: 640px; }
+.hero h1 em { color: var(--amber); font-style: normal; }
+.stats { display: flex; gap: 22px; margin-left: auto; }
+.stat { text-align: right; }
+.stat b { display: block; font: 700 22px/1.1 var(--mono); color: var(--ink); }
+.stat span { color: var(--dim); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.formula {
+  margin: 12px 28px 0; padding: 9px 14px; border: 1px solid var(--line-soft); border-left: 3px solid var(--teal);
+  background: var(--panel); font: 13px var(--mono); color: var(--mut);
+}
+.formula b { color: var(--teal); font-weight: 600; }
+
+/* ---- controls ---- */
+.controls {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+  padding: 14px 28px 10px;
+}
+.controls input[type="search"], .controls select {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; font-size: 13px;
+}
+.controls input[type="search"] { width: 210px; }
+.controls label { color: var(--dim); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; }
+.views { margin-left: auto; display: flex; gap: 8px; }
+.views button {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; font-size: 13px; color: var(--mut);
+}
+.views button.on { color: #08131a; background: var(--teal); border-color: var(--teal); font-weight: 650; }
+.count { padding: 0 28px 8px; color: var(--dim); font: 12px var(--mono); }
+
+/* ---- board table ---- */
+.board-wrap { padding: 0 28px 8px; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; color: var(--dim); font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase;
+  padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+thead th.num, td.num { text-align: right; }
+tbody td { padding: 8px 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--panel-2); }
+tbody tr.top td { background: rgba(242, 179, 61, 0.05); }
+td.rank { font: 700 15px var(--mono); color: var(--mut); width: 52px; }
+tr.top td.rank { color: var(--amber); }
+td.name { min-width: 210px; }
+td.name b { font-size: 14.5px; font-weight: 620; }
+td.name .sub { display: block; color: var(--dim); font-size: 12px; }
+td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+td.val { font-family: var(--mono); font-size: 13.5px; color: var(--teal); white-space: nowrap; }
+.bar { display: block; height: 3px; background: var(--line); margin-top: 4px; border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--teal); }
+.bar.amber i { background: var(--amber); }
+.chg { font-family: var(--mono); font-size: 13px; }
+.chg.up { color: var(--grn); } .chg.dn { color: var(--red); }
+.badge {
+  display: inline-block; padding: 1px 7px; border-radius: 99px; font: 700 10.5px var(--mono); letter-spacing: 0.06em;
+}
+.badge.wl { background: var(--amber); color: #191104; }
+.badge.er { border: 1px solid var(--line); color: var(--dim); }
+.empty { padding: 34px 28px; color: var(--mut); }
+
+/* ---- methodology ---- */
+.method { margin: 26px 28px 8px; border: 1px solid var(--line); background: var(--panel); padding: 20px 22px; }
+.method h2 { margin: 0 0 6px; font-size: 18px; }
+.method p { margin: 6px 0; color: var(--mut); max-width: 880px; }
+.method p b, .method li b { color: var(--ink); }
+.method ul { margin: 8px 0; padding-left: 18px; color: var(--mut); max-width: 880px; }
+.method .fx {
+  font: 13.5px/1.9 var(--mono); color: var(--ink); background: var(--panel-2);
+  border: 1px solid var(--line-soft); padding: 12px 16px; margin: 12px 0; overflow-x: auto; white-space: nowrap;
+}
+.method .fx span { color: var(--teal); }
+.cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 6px 18px; margin-top: 10px; }
+.cats div { display: flex; justify-content: space-between; font: 12.5px var(--mono); color: var(--mut); border-bottom: 1px dashed var(--line-soft); padding: 3px 0; }
+.cats b { color: var(--ink); font-weight: 600; }
+.cats .f { color: var(--amber); }
+
+/* ---- detail ---- */
+.detail { padding: 18px 28px 10px; }
+.back { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--mut); padding: 6px 12px; font-size: 13px; }
+.detail h1 { margin: 14px 0 2px; font-size: 27px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.detail .sub { color: var(--dim); font-size: 13px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.cell { background: var(--panel); border: 1px solid var(--line-soft); padding: 10px 12px; }
+.cell span { display: block; color: var(--dim); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.cell b { font: 650 17px var(--mono); }
+.panel { background: var(--panel); border: 1px solid var(--line); padding: 16px 18px; margin: 14px 0; }
+.panel h2 { margin: 0 0 10px; font-size: 16px; }
+.water { font-family: var(--mono); font-size: 13.5px; }
+.water .row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; border-bottom: 1px dashed var(--line-soft); color: var(--mut); }
+.water .row b { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.water .row.total { border-bottom: none; border-top: 1px solid var(--line); margin-top: 4px; padding-top: 9px; }
+.water .row.total b { color: var(--teal); font-size: 15px; }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.steps li:last-child { border-bottom: none; }
+.steps .n {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--amber);
+  color: var(--amber); font: 700 13px/26px var(--mono); text-align: center;
+}
+.steps p { margin: 0; color: var(--ink); max-width: 860px; }
+.chips { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font: 11.5px var(--mono); color: var(--mut); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; }
+.chip b { color: var(--teal); font-weight: 600; }
+.note { color: var(--dim); font-size: 12.5px; max-width: 880px; }
+
+/* ---- live ---- */
+.live-note { padding: 0 28px 8px; color: var(--mut); max-width: 880px; }
+
+footer { padding: 18px 28px 26px; color: var(--dim); font-size: 12.5px; border-top: 1px solid var(--line-soft); margin-top: 22px; }
+footer p { margin: 4px 0; max-width: 920px; }
