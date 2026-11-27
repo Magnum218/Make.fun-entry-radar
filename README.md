@@ -15,10 +15,12 @@ the snapshot alone; the dashboard's methodology section prints the whole categor
 protocol's detail view multiplies its factors out, so the number can be checked from the page.
 
 The dashboard is a static page (no framework, no network): a sortable, filterable board with the
-40-protocol watchlist badged as the top tier, a detail view per protocol with its value waterfall
-and a concrete farm plan (six steps, each with a cost and a time), a separate live-tokens view,
-and the model stated in full. `main.ts` (Node 22, standard library only) computes the board and
-writes `board.json`, the dashboard's `data.js`, and the `dossier.json` the judge reads.
+40-protocol watchlist badged as the top tier, a detail view per protocol with its value waterfall,
+a reading of why that row ranks where it does and a concrete farm plan (six steps, each with a
+cost and a time), a separate live-tokens view, and a methodology view that walks the whole
+pipeline — ingest, the pre-token test, the watchlist floor, the scoring and how a row earns its
+farm steps — with the model stated in full. `main.ts` (Node 22, standard library only) computes
+the board and writes `board.json`, the dashboard's `data.js`, and the `dossier.json` the judge reads.
 
 ## Run it
 

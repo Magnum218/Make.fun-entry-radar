@@ -1,8 +1,11 @@
 // UNMINTED's dashboard. It reads window.RADAR (written beside dashboard/ by main.ts) and renders
-// the ranked board, a detail view for every protocol with the model's workings and the farm plan
-// from board.json itself, a separate live-token view, and the model stated in full. No network:
-// every byte it shows arrived in data.js. State lives in the location hash, so a view can be
-// linked and reproduced exactly: #cat=Lending, #slug=<protocol>, #view=live.
+// the ranked board, a detail view for every protocol with the model's workings, its own reading
+// of its rank and the farm plan from board.json itself, a separate live-token view, and a
+// methodology view that walks the whole pipeline — ingest, the pre-token test, the watchlist
+// floor, the scoring and how a row earns its farm steps — with the model stated in full.
+// No network: every byte it shows arrived in data.js. State lives in the location hash, so a
+// view can be linked and reproduced exactly: #cat=Lending, #slug=<protocol>, #view=live,
+// #view=method.
 (function () {
   'use strict';
 
@@ -64,11 +67,21 @@
     Object.keys(patch).forEach(function (k) { state[k] = patch[k]; });
     var parts = [];
     ['view', 'q', 'chain', 'cat', 'tier', 'sort', 'slug'].forEach(function (k) {
+      if (k === 'view') {
+        if (state.view === 'live' || state.view === 'method') parts.push('view=' + state.view);
+        return;
+      }
       if (state[k] && state[k] !== 'board' && state[k] !== 'all' && state[k] !== 'implied') parts.push(k + '=' + encodeURIComponent(state[k]));
-      if (k === 'view' && state.view === 'live') parts.push('view=live');
     });
     history.replaceState(null, '', '#' + parts.join('&'));
     render();
+  }
+
+  // The three top-level views, as one switcher used by every view's chrome.
+  function viewTabs() {
+    return '<div class="views"><button id="v-board" class="' + (state.view !== 'live' && state.view !== 'method' ? 'on' : '') + '">Pre-token board</button>' +
+      '<button id="v-live" class="' + (state.view === 'live' ? 'on' : '') + '">Live tokens</button>' +
+      '<button id="v-method" class="' + (state.view === 'method' ? 'on' : '') + '">Methodology</button></div>';
   }
 
   var maxImplied = Math.max.apply(null, R.rows.map(function (r) { return r.implied_value_usd; }));
@@ -134,7 +147,7 @@
       '<div class="stat"><b>' + R.board_size + '</b><span>ranked</span></div>' +
       '<div class="stat"><b>' + R.watchlist_size + '</b><span>watchlist tier</span></div>' +
       '</div></section>';
-    html += '<div class="formula">implied value = TVL x <b>0.25</b> x <b>category factor</b> x <b>growth factor</b> x <b>maturity factor</b> &nbsp;·&nbsp; model ' + esc(R.model_version) + ', stated in full below</div>';
+    html += '<div class="formula">implied value = TVL x <b>0.25</b> x <b>category factor</b> x <b>growth factor</b> x <b>maturity factor</b> &nbsp;·&nbsp; model ' + esc(R.model_version) + ' — the Methodology view states it in full, with the pipeline that produced this board</div>';
     html += '<div class="controls">' +
       '<input type="search" id="q" placeholder="Search name, category, chain" value="' + esc(state.q) + '">' +
       '<label>Chain <select id="chain">' + options(Object.keys(chains).sort(), state.chain, 'All chains') + '</select></label>' +
@@ -148,9 +161,13 @@
       '<option value="tvl"' + (state.sort === 'tvl' ? ' selected' : '') + '>TVL</option>' +
       '<option value="chg"' + (state.sort === 'chg' ? ' selected' : '') + '>7d change</option>' +
       '<option value="age"' + (state.sort === 'age' ? ' selected' : '') + '>Time tokenless</option></select></label>' +
-      '<div class="views"><button id="v-board" class="' + (state.view !== 'live' ? 'on' : '') + '">Pre-token board</button>' +
-      '<button id="v-live" class="' + (state.view === 'live' ? 'on' : '') + '">Live tokens</button></div></div>';
+      viewTabs() + '</div>';
     html += '<div class="count">Showing ' + rows.length + ' of ' + R.board_size + ' ranked protocols · click any row for its value breakdown and farm plan</div>';
+    html += '<div class="legend"><span><span class="badge wl">WATCHLIST</span> above the ' + money(R.floor_usd) + ' floor, house-listed</span>' +
+      '<span><span class="badge er">EARLY</span> below-floor early radar</span>' +
+      '<span>teal bar under a value: its place on the board\u2019s log scale</span>' +
+      '<span>bar beside a 7d change: its size, capped at 60%</span>' +
+      '<span>top-3 rows are tinted amber</span></div>';
     if (rows.length === 0) {
       html += '<div class="empty">No ranked protocol matches this filter. Loosen the search, chain or category to see the board again.</div>';
     } else {
@@ -199,6 +216,112 @@
       '</section>';
   }
 
+  // ---------- methodology ----------
+  // The fourth view: the radar explained as a working system — the pipeline that produced the
+  // board, why the score is shaped the way it is, where every figure comes from, and how a row
+  // earns its farm steps. Everything stated here is computed from the same data.js the board
+  // renders, so the view cannot drift from the board it explains.
+  function methodView() {
+    var m = R.model;
+    var traded = R.scanned_size - R.pretoken_size;
+    var cats = R.categories.filter(function (c) { return c.live_count > 0; }).sort(function (a, b) { return b.factor - a.factor; });
+    var catHtml = cats.map(function (c) {
+      return '<div><span><b>' + esc(c.category || 'Uncategorized') + '</b> · ' + c.live_count + ' live</span><span>median ' +
+        (c.median_ratio === null ? '—' : c.median_ratio) + ' · <span class="f">' + mult(c.factor) + '</span></span></div>';
+    }).join('');
+    var top = R.rows[0];
+    var tags = [
+      'wallet hygiene — priced from its first chain\u2019s gas tier',
+      'the core action — from its category, its TVL capital tier and its first chain',
+      'the weekly beat — from its category family',
+      'the hold — from its time tokenless',
+      'claim hygiene — the same for every row',
+      'the log and the stop rule — the same for every row',
+    ];
+    var anatomy = top.farm_steps.map(function (s, i) {
+      var p = splitStep(s);
+      return '<li><span class="n">' + (i + 1) + '</span><div><p>' + esc(p.text) + '</p>' +
+        '<div class="chips"><span class="chip">cost <b>' + esc(p.cost) + '</b></span><span class="chip">time <b>' + esc(p.time) + '</b></span>' +
+        '<span class="chip src">' + tags[i] + '</span></div></div></li>';
+    }).join('');
+    var html = '';
+    html += '<section class="hero"><h1>How this radar works — <em>the live method</em>, end to end.</h1>' +
+      '<div class="stats">' +
+      '<div class="stat"><b>5</b><span>pipeline stages</span></div>' +
+      '<div class="stat"><b>10</b><span>fields per record</span></div>' +
+      '<div class="stat"><b>0</b><span>names special-cased</span></div>' +
+      '<div class="stat"><b>' + R.board_size + '</b><span>rows ranked</span></div>' +
+      '</div></section>';
+    html += '<div class="controls">' + viewTabs() + '</div>';
+
+    html += '<section class="method"><h2>The signal pipeline — from one sealed snapshot to this board</h2>' +
+      '<div class="pipe">' +
+      '<div class="stage"><span class="sn">1</span><div><h3>Ingest — one sealed snapshot</h3><p>' + R.scanned_size +
+      ' protocol records from the DefiLlama index, fetched once and sealed (' + esc(R.source) + ', as of ' + esc(R.as_of) +
+      '). Ten fields per record. The program reads that file and nothing else — never the network — so the board it writes can be reproduced byte for byte.</p></div><span class="cnt">' + R.scanned_size + ' records</span></div>' +
+      '<div class="stage"><span class="sn">2</span><div><h3>The pre-token test</h3><p>A record <b>records no token</b> when its market cap, CoinGecko id and symbol are all empty. ' +
+      R.pretoken_size + ' records pass. The ' + traded + ' that already trade are set aside: never ranked here, and kept as the yardstick the category factors are priced from.</p></div><span class="cnt">' + R.pretoken_size + ' record no token</span></div>' +
+      '<div class="stage"><span class="sn">3</span><div><h3>The watchlist floor</h3><p>At or above ' + full(R.floor_usd) +
+      ' of TVL, the house\u2019s listing rule applies: not a wrapped, staked or bridged product of a token that trades, not an exchange house, no version marker in the name. ' +
+      R.watchlist_size + ' slugs pass — and the board must cover every one. Coverage is a gate, not a goal.</p></div><span class="cnt">' + R.watchlist_size + ' slugs · 100% covered</span></div>' +
+      '<div class="stage"><span class="sn">4</span><div><h3>The early radar</h3><p>Below the floor, every other rankable pre-token protocol joins the board: not an exchange record, not a versioned pool of another protocol. Above the floor, a pre-token record the watchlist leaves out is a product of another protocol\u2019s record, so the radar leaves it out too.</p></div><span class="cnt">' + R.early_size + ' early rows</span></div>' +
+      '<div class="stage"><span class="sn">5</span><div><h3>Score and rank</h3><p>One function prices every chosen record (the scoring below), and the board sorts by that value, ties broken by slug. No name is read twice and no name is special-cased: change the record and the rank follows, change nothing else and it cannot.</p></div><span class="cnt">' + R.board_size + ' rows ranked</span></div>' +
+      '</div></section>';
+
+    html += '<section class="method"><h2>Scoring rationale — why the value is shaped this way</h2>' +
+      '<div class="fx">implied = round( TVL x <span>' + m.base_multiple + '</span> x <span>category factor</span> x <span>(1 + clamp(7d change, ' +
+      m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ')</span> x <span>(' + m.maturity_floor + ' + min(tokenless days, ' +
+      m.maturity_days + ') / ' + m.maturity_days + ' x ' + m.maturity_range + ')</span> )</div>' +
+      '<ul>' +
+      '<li><b>Base — TVL x ' + m.base_multiple + '.</b> The house radar-1 spine, kept unchanged so this board stays comparable with the house\u2019s own. TVL is the one size figure every record carries, so it is the only honest base.</li>' +
+      '<li><b>Category factor — what its market pays.</b> A launch is worth what launched protocols in its category actually trade at: the median market-cap / TVL of the category\u2019s live protocols in this snapshot, divided by the all-category median (' + R.global_median_ratio + '). A median, not a mean, so one giant cannot bend it. Fewer than ' + m.category_min_live + ' live peers and the factor stays x1 — the snapshot is too thin to price that category — and it is bounded to [' + m.category_factor_min + ', ' + m.category_factor_max + '], so it can adjust a value, never decide one.</li>' +
+      '<li><b>Growth factor — momentum, halved and clamped.</b> The record\u2019s own 7-day TVL change, weighted ' + m.growth_weight + ' and clamped to [' + m.growth_floor + '%, +' + m.growth_cap + '%] before it is applied: momentum counts, but one hot week cannot buy the top of the board.</li>' +
+      '<li><b>Maturity factor — time tokenless as evidence.</b> Days since the index began tracking the protocol, saturating at ' + m.maturity_days + '. A protocol that has run for years with no token is priced as a larger, later launch than one listed last month. An unrecorded listing date counts as ' + m.unknown_age_days + ' days — stated openly, not treated as zero and not as forever.</li>' +
+      '</ul>' +
+      '<p><b>What the model refuses to read:</b> names (no protocol is boosted or buried by hand), prices from anywhere else, points programmes, social signals and launch rumours. If a figure is not in the sealed record, it cannot move a row — that is what makes this board checkable from this page alone.</p>' +
+      '<p><b>The category table the factors were priced from</b> — every figure measured on this snapshot\u2019s live set, nothing imported:</p>' +
+      '<div class="cats">' + catHtml + '</div>' +
+      '</section>';
+
+    html += '<section class="method"><h2>Data sources — one snapshot, ten fields, each with a job</h2>' +
+      '<p>The only source is the sealed snapshot named in the header (' + esc(R.source) + ', as of ' + esc(R.as_of) + ', floor ' + full(R.floor_usd) + '). The fields and what each one does:</p>' +
+      '<ul>' +
+      '<li><b>tvl_usd</b> — the base of every value, and the floor test at stage 3.</li>' +
+      '<li><b>change_7d</b> — the growth factor, clamped before use.</li>' +
+      '<li><b>listed_at</b> — the maturity factor: how long the protocol has run tokenless.</li>' +
+      '<li><b>category</b> — the category factor, and the farm plan\u2019s core action.</li>' +
+      '<li><b>chains</b> — the farm plan\u2019s venue and gas tier (the first chain named).</li>' +
+      '<li><b>mcap_usd, gecko_id, symbol</b> — read only as the pre-token test at stage 2, and, for protocols that trade, as the live yardstick.</li>' +
+      '<li><b>name, slug</b> — carried for display and for the version-marker rule; never scored.</li>' +
+      '</ul>' +
+      '<p><b>Refresh:</b> the radar is a program, not a page someone edits. Run it on a newer snapshot and the same function writes a new board; every figure in every view traces to the snapshot named above, and to nothing else.</p>' +
+      '</section>';
+
+    html += '<section class="method"><h2>How a row earns its farm steps</h2>' +
+      '<p>Every row hands in six steps, generated from the row\u2019s own record by four lookups — never written per name:</p>' +
+      '<ul>' +
+      '<li><b>category</b> &rarr; the core action and the weekly beat (twenty category families — supply, provide, bridge, stake, mint, hedge and more — with a plain deposit where no family matches);</li>' +
+      '<li><b>first chain</b> &rarr; the gas tier (under $1 on Solana- and Polygon-class chains, about $12 on Ethereum, tiers between);</li>' +
+      '<li><b>TVL</b> &rarr; the capital tier ($50 below $100M of TVL, rising to $250 at $5B and above);</li>' +
+      '<li><b>age</b> &rarr; the hold window (60 days under six months tokenless, 30 days past a year).</li>' +
+      '</ul>' +
+      '<p>The six beats never change shape: set up a clean wallet; take the core position; do one small qualifying action every week; hold across more than one weekly snapshot; check the protocol\u2019s own page before claiming anything, and never pay a fee to claim; keep a farm log, and stop the week a token appears. Each step states its cost and its time, because a plan without either is a wish.</p>' +
+      '<p><b>The anatomy of one real plan</b> — rank 1, ' + esc(top.name) + ', with the record each step was priced from:</p>' +
+      '<ol class="steps">' + anatomy + '</ol>' +
+      '</section>';
+
+    html += '<section class="method"><h2>Legends — reading the board</h2>' +
+      '<div class="legends">' +
+      '<div><span class="badge wl">WATCHLIST</span><p>Above the ' + money(R.floor_usd) + ' floor and on the house\u2019s list: the top tier, covered in full.</p></div>' +
+      '<div><span class="badge er">EARLY</span><p>Below the floor: the early radar\u2019s own finds, ranked by the same function.</p></div>' +
+      '<div><span class="bar demo"><i style="width:62%"></i></span><p>The teal bar under a value: its place between the board\u2019s smallest and largest implied value, on a log scale — values span orders of magnitude, and a linear bar would flatten all but the top rows.</p></div>' +
+      '<div><span class="bar amber demo"><i style="width:45%"></i></span><p>The bar beside a 7d change: amber when the week rose, plain when it fell, as wide as the move and capped at 60%.</p></div>' +
+      '<div><span class="mono-chip">x1.00</span><p>A neutral factor: the snapshot gave that term nothing to say — too few live peers, no recorded growth, or an unrecorded age priced at the stated default.</p></div>' +
+      '<div><span class="mono-chip">records no token</span><p>A statement about the record — no market cap, no CoinGecko id, no symbol in this snapshot — not proof that no token exists anywhere.</p></div>' +
+      '</div></section>';
+    return html;
+  }
+
   // ---------- detail ----------
   function splitStep(s) {
     var ci = s.lastIndexOf(' Cost: ');
@@ -207,6 +330,31 @@
     var ti = rest.lastIndexOf('. Time: ');
     if (ti < 0) return { text: s.slice(0, ci), cost: rest, time: '' };
     return { text: s.slice(0, ci), cost: rest.slice(0, ti), time: rest.slice(ti + 8).replace(/\.$/, '') };
+  }
+
+  // One row read back in words: where it stands, what moves its value most, and what would have
+  // to change in its record for the value to move. Every figure is the row's own or the board's.
+  function reasonPanel(r) {
+    var sorted = R.rows.map(function (x) { return x.implied_value_usd; }).sort(function (a, b) { return a - b; });
+    var median = sorted[Math.floor(sorted.length / 2)];
+    var terms = [
+      ['category factor', r.category_factor, 'priced from ' + r.category_live_count + ' live ' + (r.category || 'uncategorized') + ' protocols in this snapshot'],
+      ['growth factor', r.growth_multiplier, 'its own 7d TVL change of ' + pct(r.change_7d) + ', clamped and halved'],
+      ['maturity factor', r.maturity_multiplier, 'tokenless for ' + days(r.age_days)],
+    ];
+    var dom = terms[0];
+    terms.forEach(function (t) { if (Math.abs(Math.log(t[1])) > Math.abs(Math.log(dom[1]))) dom = t; });
+    var topShare = Math.round(r.rank / R.board_size * 100);
+    var standing = r.rank <= 3 ? 'on the podium' : topShare <= 10 ? 'inside the top tenth of the board' : topShare <= 50 ? 'in the board\u2019s top half' : 'in the board\u2019s lower half';
+    var driver = Math.abs(Math.log(dom[1])) < 0.01
+      ? 'No factor moves it: all three multipliers sit at or near x1, so this rank is its TVL speaking almost alone.'
+      : 'The term that moves it most is its <b>' + dom[0] + '</b> at ' + mult(dom[1]) + ' — ' + dom[2] + '.';
+    var vsMedian = 'Its implied value is <b>' + (Math.round(r.implied_value_usd / median * 100) / 100) + 'x the board median</b> (' + money(median) + ').';
+    var sens = 'The value is linear in TVL: on the same record with 10% more TVL it would read ' + full(Math.round(r.implied_value_usd * 1.1)) + ' instead of ' + full(r.implied_value_usd) + '.';
+    return '<div class="panel"><h2>Why it ranks here</h2>' +
+      '<p class="why">Rank ' + r.rank + ' of ' + R.board_size + ' — ' + standing + ', ' + (r.watchlist ? 'in the watchlist tier' : 'an early-radar row below the floor') + '. ' + vsMedian + '</p>' +
+      '<p class="why">' + driver + '</p>' +
+      '<p class="why">' + sens + ' Nothing else about the record is read: no name, no reputation, no signal from outside the snapshot.</p></div>';
   }
 
   function detailView() {
@@ -243,6 +391,7 @@
       '<div class="row"><span>x maturity factor (tokenless ' + days(r.age_days) + ')</span><b>' + mult(r.maturity_multiplier) + '</b></div>' +
       '<div class="row total"><span>Implied value if it launched on this record</span><b>' + full(r.implied_value_usd) + '</b></div>' +
       '</div><p class="note">Steps are rounded for display; the board\u2019s figure is the model\u2019s, computed in one pass from the snapshot\u2019s own figures.</p></div>' +
+      reasonPanel(r) +
       '<div class="panel"><h2>Farm plan — what to do before any launch</h2><ol class="steps">' + steps + '</ol>' +
       '<p class="note">This is the same plan the board hands in for ' + esc(r.name) + ': six steps, each with its cost and its time, generated from the protocol\u2019s own category, chain, TVL and age — never written per name.</p></div>' +
       '</section>';
@@ -267,8 +416,7 @@
     return '<section class="hero"><h1>Already trading — <em>the yardstick</em>, not the board.</h1>' +
       '<div class="stats"><div class="stat"><b>' + R.live_size + '</b><span>shown of the live set</span></div>' +
       '<div class="stat"><b>' + R.global_median_ratio + '</b><span>median mcap / TVL</span></div></div></section>' +
-      '<div class="controls"><div class="views" style="margin-left:0"><button id="v-board">Pre-token board</button>' +
-      '<button id="v-live" class="on">Live tokens</button></div></div>';
+      '<div class="controls">' + viewTabs() + '</div>';
   }
 
   // ---------- render + wiring ----------
@@ -276,6 +424,7 @@
     app.setAttribute('aria-busy', 'false');
     if (state.view === 'detail') app.innerHTML = detailView();
     else if (state.view === 'live') app.innerHTML = liveView();
+    else if (state.view === 'method') app.innerHTML = methodView();
     else app.innerHTML = boardView();
     wire();
     window.scrollTo(0, 0);
@@ -291,6 +440,8 @@
     if (vb) vb.addEventListener('click', function () { setHash({ view: 'board', slug: '' }); });
     var vl = document.getElementById('v-live');
     if (vl) vl.addEventListener('click', function () { setHash({ view: 'live', slug: '' }); });
+    var vm = document.getElementById('v-method');
+    if (vm) vm.addEventListener('click', function () { setHash({ view: 'method', slug: '' }); });
     var back = document.getElementById('back');
     if (back) back.addEventListener('click', function () { setHash({ view: 'board', slug: '' }); });
     app.querySelectorAll('tr[data-slug]').forEach(function (tr) {
